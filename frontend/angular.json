@@ -50,8 +50,9 @@
               "src/assets"
             ],
             "styles": [
-              "src/styles.scss" ,
-            "src/main-style.scss"],
+              "src/styles.scss",
+              "src/main-style.scss"
+            ],
             "scripts": []
           },
           "configurations": {
@@ -145,6 +146,10 @@
           }
         }
       }
-    }},
-  "defaultProject": "frontend"
+    }
+  },
+  "defaultProject": "frontend",
+  "cli": {
+    "analytics": "b794835b-0853-4c0e-9c43-0fbf31cc82ee"
+  }
 }
