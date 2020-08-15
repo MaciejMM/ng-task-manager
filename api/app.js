@@ -1,21 +1,79 @@
 const express = require('express');
 const app = express();
 const bodyParser = require('body-parser');
-const { mongoose } = require('./db/mongoose');
+const mongoose= require('./db/mongoose');
+const crypt = require('crypto');
 
 // Load in mongoose modules
-const { List, Task } = require('./db/modules/index');
+const {
+    List,
+    Task,
+    User
+} = require('./db/modules/index');
 
-// load middleware
+/* MIDDLEWARE */
+
+// Load middleware
 app.use(bodyParser.json())
 
 // CORS HEADER MIDDLEWARE
-app.use(function(req, res, next) {
+app.use(function (req, res, next) {
     res.header("Access-Control-Allow-Origin", "*"); // update to match the domain you will make the request from
-    res.header("Access-Control-Allow-Methods","GET, POST, HEAD, OPTIONS, PUT, PATCH, DELETE");
+    res.header("Access-Control-Allow-Methods", "GET, POST, HEAD, OPTIONS, PUT, PATCH, DELETE");
     res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
     next();
-  });
+});
+
+
+// verify refresh Token middleware (which will be verifying session)
+
+let verifySession = (req,res,next)=>{
+    // Grab refresh token from the header
+    const refreshToken = req.header('x-refresh-token');
+
+    // Grab id from the header
+    const _id = req.header('_id');
+
+    let isSessionValid = false;
+
+    User.findByIdAndToken(_id,refreshToken).then((user)=>{
+        if(!user){
+            // User couldn't be found
+            return Promise.reject({
+                "error":"User not found. Make sure that refresh token and user ID are valid"
+            })
+        }
+        // If user was found
+        // Therefore the session token exist in DB - but we have to check if it has expired
+        req.user_id = user._id;
+        req.userObject = user;
+        req.refreshToken = refreshToken;
+        user.sessions.forEach((session)=>{
+            if(session.token ===refreshToken){
+                // check if the sessions has expired
+                if(User.hasRefreshTokenExpired(session.expireAt)===false){
+                    // refresh token has not expired
+                    isSessionValid =true;
+                }
+            }
+        });
+        if(isSessionValid){
+            // The session is valid - call next() to continue with processing this web request
+            next()
+        }else{
+            // the session is not valid
+            return Promise.reject({
+                "Error":"Refresh token has expired or the session is invalid"
+            })
+        };
+
+    }).catch((e)=>{
+        res.status(401).send(e);
+    })
+
+};
+/* END MIDDLEWARE */
+
 
 /**
  * GET /lists
@@ -28,7 +86,9 @@ app.get('/lists', (req, res) => {
         .then(lists => {
             res.send(lists)
         })
-        .catch()
+        .catch(err => {
+            console.log(err);
+        })
 })
 
 /**
@@ -61,10 +121,10 @@ app.post('/lists', (req, res) => {
 app.patch('/lists/:id', (req, res) => {
     // We want to update specified list (list document with id in the URL) with the new values specified in JSON body of the request
     List.findOneAndUpdate({
-        _id: req.params.id
-    }, {
-        $set: req.body
-    })  
+            _id: req.params.id
+        }, {
+            $set: req.body
+        })
         .then(() => {
             res.sendStatus(200);
         })
@@ -80,8 +140,8 @@ app.patch('/lists/:id', (req, res) => {
 app.delete('/lists/:id', (req, res) => {
     // We want to delete specified list (list document with id in the URL) with the new values specified in JSON body of the request
     List.findOneAndRemove({
-        _id: req.params.id
-    })
+            _id: req.params.id
+        })
         .then((removedListDoc) => {
             res.send(removedListDoc).json({
                 message: "Requested item has been deleted"
@@ -98,13 +158,15 @@ app.delete('/lists/:id', (req, res) => {
  */
 app.get('/lists/:listId/tasks', (req, res) => {
     // We want to return all task which belongs to specific list
+
+
     Task.find({
-        _listId: req.params.listId
-    })
+            _listId: req.params.listId
+        })
         .then((tasks) => {
             res.send(tasks)
         })
-        .catch((err)=>{
+        .catch((err) => {
             console.log(err);
         })
 });
@@ -136,15 +198,15 @@ app.post('/lists/:listId/tasks', (req, res) => {
  */
 app.patch('/lists/:listId/tasks/:taskId', (req, res) => {
     Task.findOneAndUpdate({
-        _id: req.params.taskId,
-        _listId: req.params.listId
-    }, {
-        $set: req.body
+            _id: req.params.taskId,
+            _listId: req.params.listId
+        }, {
+            $set: req.body
 
-    })
+        })
         .then(() => {
             res.send({
-                message:"Updated successfully"
+                message: "Updated successfully"
             });
         })
         .catch(err => {
@@ -158,13 +220,13 @@ app.patch('/lists/:listId/tasks/:taskId', (req, res) => {
  */
 app.delete('/lists/:listId/tasks/:taskId', (req, res) => {
     Task.findOneAndRemove({
-        _id: req.params.taskId,
-        _listId: req.params.listId
-    })
+            _id: req.params.taskId,
+            _listId: req.params.listId
+        })
         .then(() => {
             // res.sendStatus(200);
             res.status(200).json({
-                message:"Requested item has been "
+                message: "Requested item has been "
             })
         })
         .catch(err => {
@@ -173,6 +235,92 @@ app.delete('/lists/:listId/tasks/:taskId', (req, res) => {
 });
 
 
+
+/* USER ROUTES */
+
+/**
+ * POST /users
+ * Purpose: sign up
+ */
+
+app.post('/users', (req, res) => {
+    //  User sign up
+    let body = req.body;
+    let newUser = new User(body)
+    newUser
+        .save()
+        .then(() => {
+            return newUser.createSession();
+        })
+        .then((refreshToken) => {
+            return newUser.generateRefreshAuthToken().then((accessToken) => {
+                // access auth token generated successfully
+                return {
+                    accessToken,
+                    refreshToken
+                }
+            })
+        })
+        .then((authToken) => {
+            res
+                .header('x-refresh-token', authToken.refreshToken)
+                .header('x-access-token', authToken.accessToken)
+                .send(newUser)
+        })
+        .catch((err) => {
+            console.log(err);
+            res.status(400).send(err)
+        })
+})
+/**
+ * POST /users/login
+ * Purpose: Login route
+ */
+app.post('/users/login', (req, res) => {
+    let email = req.body.email;
+    let password = req.body.password;
+    User.findByCredentials(email,password)
+        .then((user)=>{
+            return user.createSession()
+            .then((refreshToken)=>{
+                // session has been created successfully - refresh token returned
+                // generate an access to auth token for the user
+
+                return user.generateAccessAuthToken().then((accessToken)=>{
+                    return {accessToken,refreshToken}
+                })
+
+            })
+            .then((authToken)=>{
+                res
+                .header('x-refresh-token', authToken.refreshToken)
+                .header('x-access-token', authToken.accessToken)
+                .send(user)
+            })
+            .catch((err)=>{
+                res.status(400).send(err)
+
+            })
+    })
+})
+
+
+
+/*
+ * GET /users/me/access-token
+ * Purpose: generates and return an access token
+ */
+app.get('/users/me/access-token',verifySession,(req,res)=>{
+    // we know that the user caller is authenticated and we have a user_id and user object avaiable to us
+    req.userObject.generateAccessAuthToken()
+        .then((accessToken)=>{
+            res.header('x-access-token',accessToken).send({accessToken})
+        })
+        .catch((e)=>{
+            res.status(400).send(e);
+        })
+
+});
 
 app.listen(3000, () => {
     console.log('Server is listening on port 3000');
