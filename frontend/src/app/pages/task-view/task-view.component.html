@@ -34,6 +34,11 @@
       <div *ngIf="!tasks">
         <h3 class="empty-state-text">Please select a list from the sidebar</h3>
       </div>
+
+      <div *ngIf="tasks && tasks.length==0">
+        <h3 class="empty-state-text">There are no items assigned to this list.<br> Click <b>+</b> to add new.</h3>
+      </div>
+
       </div>
 
   </div>
