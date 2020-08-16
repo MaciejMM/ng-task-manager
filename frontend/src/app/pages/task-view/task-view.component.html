@@ -15,19 +15,26 @@
       <button class="button is-primary" routerLink='/new-list'>+ New List</button>
 
     </div>
-    <div class="task-list-container has-background-light">
-      <h1 class="title has-text-primary">Tasks</h1>
+    <div class="task-list-container has-background-light" >
 
-      <!-- Tasks elemets -->
-      <div class="task" *ngFor="let task of tasks" (click)=onTaskClick(task) [ngClass]="{'completed':task.completed}">
-        <p  >{{task.title}} </p>
+      <div *ngIf="tasks">
+        <h1 class="title has-text-primary">Tasks</h1>
+
+        <!-- Tasks elemets -->
+        <div class="task" *ngFor="let task of tasks" (click)=onTaskClick(task) [ngClass]="{'completed':task.completed}">
+          <p  >{{task.title}} </p>
+        </div>
+  
+  
+  
+        <button class="circle-add-button button is-primary" routerLink='./new-task'>+</button>
+
       </div>
 
-
-
-      <button class="circle-add-button button is-primary" routerLink='./new-task'>+</button>
-
-    </div>
+      <div *ngIf="!tasks">
+        <h3 class="empty-state-text">Please select a list from the sidebar</h3>
+      </div>
+      </div>
 
   </div>
 </div>
