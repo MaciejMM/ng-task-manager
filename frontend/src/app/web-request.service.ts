@@ -7,7 +7,7 @@ import { HttpClient } from '@angular/common/http';
 
 export class WebRequestService {
 
-  readonly ROOT_URL;
+  private ROOT_URL:string;
 
   constructor(private http: HttpClient) {
     this.ROOT_URL = 'http://localhost:3000'
@@ -29,5 +29,15 @@ export class WebRequestService {
 
   }
 
+
+  login(email: string, password: string) {
+    return this.http.post(`${this.ROOT_URL}/users/login`,
+      {
+        email, password
+      },
+      {
+        observe: 'response'
+      })
+  }
 
 }
