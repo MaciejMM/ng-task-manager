@@ -7,7 +7,7 @@ import { HttpClient } from '@angular/common/http';
 
 export class WebRequestService {
 
-  private ROOT_URL:string;
+  readonly ROOT_URL:string;
 
   constructor(private http: HttpClient) {
     this.ROOT_URL = 'http://localhost:3000'
